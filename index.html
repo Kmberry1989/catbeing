@@ -107,6 +107,7 @@
         const WALL_THICKNESS = 0.15; 
         const CAT_RADIUS = 0.25; 
         const ROOF_PANEL_THICKNESS = 0.15; 
+        const BALL_RADIUS = 0.1;
 
         // --- Procedural Model Dimensions (fallback if USE_CUSTOM_MODELS is false) ---
         const proceduralBedHeight = 0.4;
@@ -171,7 +172,8 @@
                 pos: new THREE.Vector3(0.5, FLOOR_THICKNESS + (USE_CUSTOM_MODELS ? loadedChairSeatY : proceduralSofaHeight) + CAT_RADIUS, 2.0), 
                 room: "living-room", description: "on the chair"
             },
-            "living-room-window-spot": { pos: new THREE.Vector3(-4, 1.0, 0), room: "living-room", description: "by the window (conceptual)" }
+            "living-room-window-spot": { pos: new THREE.Vector3(-4, 1.0, 0), room: "living-room", description: "by the window (conceptual)" },
+            "living-room-ball-spot": { pos: new THREE.Vector3(1.5, FLOOR_THICKNESS + BALL_RADIUS, 1.0), room: "living-room", description: "by the ball" }
         };
 
         const activities = [
@@ -181,6 +183,13 @@
             { name: "Drinking", minDuration: 2, maxDuration: 7, locations: ["kitchen-water-bowl-spot"], message: (locKey) => `Lapping up some water ${locations[locKey].description}.`},
             { name: "Looking out window", minDuration: 20, maxDuration: 60, locations: ["living-room-window-spot", "living-room-cat-tree-spot"], message: (locKey) => `Watching the world go by ${locations[locKey].description}.` },
             { name: "Playing", minDuration: 15, maxDuration: 45, locations: ["living-room-center", "bedroom-center", "kitchen-center", "living-room-cat-tree-spot"], message: (locKey) => `Zoomies! Playing energetically ${locations[locKey].description}!` },
+            {
+                name: "Playing with ball",
+                minDuration: 10, 
+                maxDuration: 25,
+                locations: ["living-room-ball-spot"], 
+                message: (locKey) => `Batting a bright orange ball ${locations[locKey].description}!`
+            },
             { name: "Grooming", minDuration: 10, maxDuration: 30, locations: ["living-room-sofa-spot", "bedroom-bed-spot", "living-room-center", "bedroom-cat-bed-spot", "living-room-chair-spot"], message: (locKey) => `Purrfectly preening ${locations[locKey].description}.` },
             { name: "Exploring", minDuration: 10, maxDuration: 20, locations: ["living-room-center", "kitchen-center", "bedroom-center"], message: (locKey) => `Sniffing around and exploring ${locations[locKey].description}.` }
         ];
@@ -351,10 +360,31 @@
                 console.log("Attempting to load CustomChair from:", chairModelURL);
                 loader.load(chairModelURL, gltf => modelLoadCallback(gltf, "CustomChair", 0.012, locations["living-room-chair-spot"].pos), xhr => modelProgressCallback(xhr, "CustomChair"), error => modelErrorCallback(error, "CustomChair"));
 
+                // Ball
+                const ballModelURL = 'https://Kmberry1989.github.io/catbeing/ball.glb'; 
+                console.log("Attempting to load CustomBall from:", ballModelURL);
+                loader.load(ballModelURL, 
+                    gltf => {
+                        // Manually adjust Y for centered-origin GLB model
+                        const loadedModel = gltf.scene;
+                        loadedModel.name = "CustomBall";
+                        const desiredScale = 0.3; // Adjust as needed
+                        loadedModel.scale.set(desiredScale, desiredScale, desiredScale);
+                        // Assuming ball GLB origin is at its center, adjust Y so bottom touches floor
+                        loadedModel.position.set(locations["living-room-ball-spot"].pos.x, FLOOR_THICKNESS + BALL_RADIUS, locations["living-room-ball-spot"].pos.z);
+                        loadedModel.traverse(node => { if (node.isMesh) { node.castShadow = true; node.receiveShadow = true; } });
+                        houseGroup.add(loadedModel);
+                        console.log(`Loaded CustomBall ADDED to scene graph.`);
+                    }, 
+                    xhr => modelProgressCallback(xhr, "CustomBall"), 
+                    error => modelErrorCallback(error, "CustomBall", createProceduralBall)
+                );
+
             } else {
                 createProceduralBed();
                 createProceduralBowl(); 
                 createProceduralSofa();
+                createProceduralBall();
             }
             scene.add(houseGroup);
             houseGroup.position.y = 0.01; 
@@ -363,6 +393,27 @@
         function createProceduralBed() { console.log("Creating procedural bed."); const bedGeo = new THREE.BoxGeometry(1.5, proceduralBedHeight, 2.5); const bedMat = new THREE.MeshStandardMaterial({ color: 0x4a5568 }); const bedMesh = new THREE.Mesh(bedGeo, bedMat); bedMesh.name = "ProceduralBed"; bedMesh.position.set(locations["bedroom-bed-spot"].pos.x, (proceduralBedHeight / 2) + FLOOR_THICKNESS, locations["bedroom-bed-spot"].pos.z); bedMesh.castShadow = true; bedMesh.receiveShadow = true; houseGroup.add(bedMesh); }
         function createProceduralBowl() { console.log("Creating procedural food bowl."); const bowlGeo = new THREE.CylinderGeometry(0.3, 0.4, proceduralBowlHeight, 16); const bowlMat = new THREE.MeshStandardMaterial({color: 0xff6347}); const bowlMesh = new THREE.Mesh(bowlGeo, bowlMat); bowlMesh.name = "ProceduralFoodBowl"; bowlMesh.position.set(locations["kitchen-food-bowl-spot"].pos.x, (proceduralBowlHeight/2) + FLOOR_THICKNESS, locations["kitchen-food-bowl-spot"].pos.z); bowlMesh.castShadow = true; houseGroup.add(bowlMesh); }
         function createProceduralSofa() { console.log("Creating procedural sofa."); const sofaGeo = new THREE.BoxGeometry(2.5, proceduralSofaHeight, 1); const sofaMat = new THREE.MeshStandardMaterial({ color: 0x744210 }); const sofaMesh = new THREE.Mesh(sofaGeo, sofaMat); sofaMesh.name = "ProceduralSofa"; sofaMesh.position.set(locations["living-room-sofa-spot"].pos.x, (proceduralSofaHeight/2) + FLOOR_THICKNESS, locations["living-room-sofa-spot"].pos.z); sofaMesh.castShadow = true; sofaMesh.receiveShadow = true; houseGroup.add(sofaMesh); }
+
+        function createProceduralBall() {
+            console.log("Creating procedural ball (sphere).");
+            // BALL_RADIUS should be accessible here
+            const ballGeometry = new THREE.SphereGeometry(BALL_RADIUS, 16, 16);
+            const ballMaterial = new THREE.MeshStandardMaterial({ color: 0xff8c00 }); // Orange
+            const ballMesh = new THREE.Mesh(ballGeometry, ballMaterial);
+            ballMesh.name = "ProceduralBall";
+            const ballLocation = locations["living-room-ball-spot"];
+            if (ballLocation) {
+                // Position is already calculated correctly in locations object
+                ballMesh.position.copy(ballLocation.pos); 
+            } else { 
+                // Fallback position if location not defined (should not happen)
+                ballMesh.position.set(1.5, FLOOR_THICKNESS + BALL_RADIUS, 1.0);
+            }
+            ballMesh.castShadow = true;
+            ballMesh.receiveShadow = true;
+            houseGroup.add(ballMesh);
+            console.log("ProceduralBall added to houseGroup.");
+        }
 
         function createCat() {
              if (USE_CUSTOM_MODELS) {
