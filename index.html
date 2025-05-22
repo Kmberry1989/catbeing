@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Idle Cat Life Simulator - 3D</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #111827; /* Dark background for contrast with 3D scene */
+            color: #f0f4f8;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start; /* Align to top for canvas */
+            min-height: 100vh;
+            margin: 0;
+            padding: 0; /* Remove padding to allow canvas to fill more space */
+            overflow: hidden; /* Prevent scrollbars from canvas */
+        }
+        #game-canvas-container {
+            width: 100vw; /* Full viewport width */
+            height: 75vh; /* 75% of viewport height */
+            max-width: 100%;
+            position: relative; /* For overlaying UI */
+        }
+        canvas {
+            display: block; /* Remove extra space below canvas */
+        }
+        .ui-container {
+            position: fixed; /* Overlay on top of the canvas */
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background-color: rgba(17, 24, 39, 0.85); /* Dark semi-transparent background */
+            backdrop-filter: blur(5px);
+            padding: 15px;
+            box-shadow: 0 -5px 15px rgba(0,0,0,0.2);
+            border-top: 1px solid rgba(55, 65, 81, 0.5);
+            z-index: 100;
+        }
+        .info-panel {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 800px; /* Max width for UI content */
+            margin: 0 auto; /* Center the info panel */
+            padding: 0 10px;
+        }
+        .clock-display, .status-display {
+            font-size: 1.1rem;
+            color: #e5e7eb; /* Light gray text */
+            font-weight: 600;
+        }
+        .status-display {
+            text-align: right;
+            flex-grow: 1; /* Allow status to take more space */
+            margin-left: 20px;
+        }
+        h1 {
+            color: #e5e7eb;
+            text-align: center;
+            padding: 10px 0;
+            font-size: 1.5rem;
+            position: fixed;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100%;
+            background-color: rgba(17, 24, 39, 0.85);
+            z-index: 101;
+        }
+    </style>
+</head>
+<body>
+    <h1 class="text-xl font-bold">Idle Cat Life - 3D</h1>
+    <div id="game-canvas-container">
+        </div>
+
+    <div class="ui-container">
+        <div class="info-panel">
+            <div id="clock-display" class="clock-display">07:00 AM</div>
+            <div id="status-display" class="status-display">Waking up...</div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+
+
+    <script>
+        // --- Configuration ---
+        const USE_CUSTOM_MODELS = true; // Set to true to load your custom models
+
+        // --- Three.js Scene Setup ---
+        let scene, camera, renderer, controls;
+        let catMesh, houseGroup;
+        const canvasContainer = document.getElementById('game-canvas-container');
+        const loader = new THREE.GLTFLoader(); 
+
+        // --- Game Constants ---
+        const gameTimeSpeed = 1000;
+        const FLOOR_THICKNESS = 0.2; 
+        const WALL_THICKNESS = 0.15; 
+        const CAT_RADIUS = 0.25; 
+        const ROOF_PANEL_THICKNESS = 0.15; 
+
+        // --- Procedural Model Dimensions (fallback if USE_CUSTOM_MODELS is false) ---
+        const proceduralBedHeight = 0.4;
+        const proceduralBowlHeight = 0.2;
+        const proceduralSofaHeight = 0.6;
+
+        // --- Game Clock ---
+        let gameHours = 7;
+        let gameMinutes = 0;
+
+        // --- DOM Elements for UI ---
+        const clockDisplay = document.getElementById('clock-display');
+        const statusDisplay = document.getElementById('status-display');
+
+        // --- Cat State & Behavior ---
+        let catActivity = {
+            name: "Waking up",
+            duration: 0,
+            locationKey: "bedroom-bed-spot", // Start on the human bed
+            message: "Stretching and yawning..."
+        };
+        
+        const loadedHumanBedTopSurfaceY = 0.5; 
+        const loadedFoodBowlTopSurfaceY = 0.1; 
+        const loadedWaterBowlTopSurfaceY = 0.1;
+        const loadedCouchTopSurfaceY = 0.4; 
+        const loadedCatBedTopSurfaceY = 0.15; 
+        const loadedCatTreePlatformY = 1.2; 
+        const loadedChairSeatY = 0.4;
+
+        // --- Define Locations ---
+        const locations = {
+            "bedroom-center": { pos: new THREE.Vector3(-2.5, FLOOR_THICKNESS + CAT_RADIUS, -1.5), room: "bedroom", description: "in the bedroom" },
+            "living-room-center": { pos: new THREE.Vector3(-0.5, FLOOR_THICKNESS + CAT_RADIUS, 1), room: "living-room", description: "in the living room" }, 
+            "kitchen-center": { pos: new THREE.Vector3(2.5, FLOOR_THICKNESS + CAT_RADIUS, -1.5), room: "kitchen", description: "in the kitchen" },
+            
+            "bedroom-bed-spot": { // Human Bed
+                pos: new THREE.Vector3( -3.5, FLOOR_THICKNESS + (USE_CUSTOM_MODELS ? loadedHumanBedTopSurfaceY : proceduralBedHeight) + CAT_RADIUS, -2.5 ), 
+                room: "bedroom", description: "on the human bed" 
+            }, 
+            "living-room-sofa-spot": { // Couch
+                pos: new THREE.Vector3( -2, FLOOR_THICKNESS + (USE_CUSTOM_MODELS ? loadedCouchTopSurfaceY : proceduralSofaHeight) + CAT_RADIUS, 2.5 ), 
+                room: "living-room", description: "on the couch" 
+            }, 
+            "kitchen-food-bowl-spot": { // Food Bowl
+                pos: new THREE.Vector3( 3, FLOOR_THICKNESS + (USE_CUSTOM_MODELS ? loadedFoodBowlTopSurfaceY : proceduralBowlHeight) + CAT_RADIUS, -2.5 ), 
+                room: "kitchen", description: "at the food bowl" 
+            }, 
+            "kitchen-water-bowl-spot": { // NEW Water Bowl
+                pos: new THREE.Vector3( 3.5, FLOOR_THICKNESS + (USE_CUSTOM_MODELS ? loadedWaterBowlTopSurfaceY : proceduralBowlHeight) + CAT_RADIUS, -2.5 ), 
+                room: "kitchen", description: "at the water bowl" 
+            },
+            "bedroom-cat-bed-spot": { // NEW Cat Bed
+                pos: new THREE.Vector3(-1.5, FLOOR_THICKNESS + (USE_CUSTOM_MODELS ? loadedCatBedTopSurfaceY : proceduralBedHeight) + CAT_RADIUS, -2.0), 
+                room: "bedroom", description: "on the cat bed"
+            },
+            "living-room-cat-tree-spot": { // NEW Cat Tree
+                pos: new THREE.Vector3(2.5, FLOOR_THICKNESS + (USE_CUSTOM_MODELS ? loadedCatTreePlatformY : proceduralSofaHeight) + CAT_RADIUS, 1.5), 
+                room: "living-room", description: "on the cat tree"
+            },
+            "living-room-chair-spot": { // NEW Chair
+                pos: new THREE.Vector3(0.5, FLOOR_THICKNESS + (USE_CUSTOM_MODELS ? loadedChairSeatY : proceduralSofaHeight) + CAT_RADIUS, 2.0), 
+                room: "living-room", description: "on the chair"
+            },
+            "living-room-window-spot": { pos: new THREE.Vector3(-4, 1.0, 0), room: "living-room", description: "by the window (conceptual)" }
+        };
+
+        const activities = [
+            { name: "Sleeping", minDuration: 120, maxDuration: 480, locations: ["bedroom-bed-spot", "living-room-sofa-spot", "bedroom-cat-bed-spot"], timeOfDay: [[22, 23], [0, 6]], message: (locKey) => `Zzz... sleeping soundly ${locations[locKey].description}.` },
+            { name: "Napping", minDuration: 30, maxDuration: 120, locations: ["bedroom-bed-spot", "living-room-sofa-spot", "living-room-window-spot", "bedroom-cat-bed-spot", "living-room-chair-spot", "living-room-cat-tree-spot"], message: (locKey) => `Having a quick catnap ${locations[locKey].description}.` },
+            { name: "Eating", minDuration: 5, maxDuration: 15, locations: ["kitchen-food-bowl-spot"], timeOfDay: [[7, 9], [17, 19]], message: (locKey) => `Nom nom... enjoying a meal ${locations[locKey].description}.` },
+            { name: "Drinking", minDuration: 2, maxDuration: 7, locations: ["kitchen-water-bowl-spot"], message: (locKey) => `Lapping up some water ${locations[locKey].description}.`},
+            { name: "Looking out window", minDuration: 20, maxDuration: 60, locations: ["living-room-window-spot", "living-room-cat-tree-spot"], message: (locKey) => `Watching the world go by ${locations[locKey].description}.` },
+            { name: "Playing", minDuration: 15, maxDuration: 45, locations: ["living-room-center", "bedroom-center", "kitchen-center", "living-room-cat-tree-spot"], message: (locKey) => `Zoomies! Playing energetically ${locations[locKey].description}!` },
+            { name: "Grooming", minDuration: 10, maxDuration: 30, locations: ["living-room-sofa-spot", "bedroom-bed-spot", "living-room-center", "bedroom-cat-bed-spot", "living-room-chair-spot"], message: (locKey) => `Purrfectly preening ${locations[locKey].description}.` },
+            { name: "Exploring", minDuration: 10, maxDuration: 20, locations: ["living-room-center", "kitchen-center", "bedroom-center"], message: (locKey) => `Sniffing around and exploring ${locations[locKey].description}.` }
+        ];
+
+        function initThreeJS() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87ceeb);
+
+            const aspect = canvasContainer.clientWidth / canvasContainer.clientHeight;
+            camera = new THREE.PerspectiveCamera(75, aspect, 0.1, 1000);
+            camera.position.set(0, 7, 12); 
+            camera.lookAt(0, 1, 0); 
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.shadowMap.enabled = true;
+            canvasContainer.appendChild(renderer.domElement);
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7); 
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.9); 
+            directionalLight.position.set(5, 10, 7.5);
+            directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 2048; 
+            directionalLight.shadow.mapSize.height = 2048;
+            directionalLight.shadow.camera.near = 0.5;
+            directionalLight.shadow.camera.far = 50;
+            directionalLight.shadow.camera.left = -15; 
+            directionalLight.shadow.camera.right = 15;
+            directionalLight.shadow.camera.top = 15;
+            directionalLight.shadow.camera.bottom = -15;
+            scene.add(directionalLight);
+            
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.screenSpacePanning = false;
+            controls.minDistance = 3; 
+            controls.maxDistance = 50;
+            controls.maxPolarAngle = Math.PI / 2 - 0.05; 
+            controls.target.set(0, 1, 0); 
+
+            const groundGeometry = new THREE.PlaneGeometry(50, 50);
+            const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x556B2F, side: THREE.DoubleSide });
+            const groundPlane = new THREE.Mesh(groundGeometry, groundMaterial);
+            groundPlane.rotation.x = -Math.PI / 2;
+            groundPlane.receiveShadow = true;
+            scene.add(groundPlane);
+
+            createHouse();
+            createCat(); 
+
+            window.addEventListener('resize', onWindowResize, false);
+        }
+
+        function createHouse() {
+            houseGroup = new THREE.Group();
+            houseGroup.name = "HouseGroup"; 
+
+            const houseWidth = 8; const houseDepth = 6; const wallHeight = 2.5; const roofPitch = 1.5; const roofOverhang = 0.3;
+            const sidingMaterial = new THREE.MeshStandardMaterial({ color: 0xd3d3d3, side: THREE.DoubleSide }); 
+            const roofMaterial = new THREE.MeshStandardMaterial({ color: 0x444444, side: THREE.DoubleSide });   
+            const foundationMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513, side: THREE.DoubleSide }); 
+            const gableAccentMaterial = new THREE.MeshStandardMaterial({ color: 0x2e8b57, side: THREE.DoubleSide }); 
+            const porchPillarMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, side: THREE.DoubleSide }); 
+            const transparentWallMaterial = new THREE.MeshStandardMaterial({ color: 0xd3d3d3, transparent: true, opacity: 0.2, side: THREE.DoubleSide });
+            const garageDoorMaterial = new THREE.MeshStandardMaterial({ color: 0xaaaaaa, side: THREE.DoubleSide }); 
+
+            const floorGeometry = new THREE.BoxGeometry(houseWidth, FLOOR_THICKNESS, houseDepth);
+            const floorMesh = new THREE.Mesh(floorGeometry, new THREE.MeshStandardMaterial({ color: 0xdeb887 })); 
+            floorMesh.position.y = FLOOR_THICKNESS / 2; floorMesh.receiveShadow = true; houseGroup.add(floorMesh);
+
+            const foundationHeight = 0.5; const foundationGeometry = new THREE.BoxGeometry(houseWidth + WALL_THICKNESS * 2, foundationHeight, houseDepth + WALL_THICKNESS * 2);
+            const foundationMesh = new THREE.Mesh(foundationGeometry, foundationMaterial);
+            foundationMesh.position.y = FLOOR_THICKNESS - (foundationHeight / 2) ; foundationMesh.castShadow = true; foundationMesh.receiveShadow = true; houseGroup.add(foundationMesh);
+
+            const backWall = new THREE.Mesh(new THREE.BoxGeometry(houseWidth, wallHeight, WALL_THICKNESS), sidingMaterial);
+            backWall.position.set(0, wallHeight / 2 + FLOOR_THICKNESS, -houseDepth / 2 - WALL_THICKNESS / 2); backWall.castShadow = true; backWall.receiveShadow = true; houseGroup.add(backWall);
+            const leftWall = new THREE.Mesh(new THREE.BoxGeometry(WALL_THICKNESS, wallHeight, houseDepth), transparentWallMaterial);
+            leftWall.position.set(-houseWidth / 2 - WALL_THICKNESS / 2, wallHeight / 2 + FLOOR_THICKNESS, 0); leftWall.castShadow = true; leftWall.receiveShadow = true; houseGroup.add(leftWall);
+            const rightWall = new THREE.Mesh(new THREE.BoxGeometry(WALL_THICKNESS, wallHeight, houseDepth), transparentWallMaterial);
+            rightWall.position.set(houseWidth / 2 + WALL_THICKNESS / 2, wallHeight / 2 + FLOOR_THICKNESS, 0); rightWall.castShadow = true; rightWall.receiveShadow = true; houseGroup.add(rightWall);
+
+            const slopeLength = Math.sqrt(Math.pow(houseWidth / 2, 2) + Math.pow(roofPitch, 2)); const roofAngle = Math.atan2(roofPitch, houseWidth / 2);
+            const rightRoofPanelGeo = new THREE.BoxGeometry(slopeLength + roofOverhang/2, ROOF_PANEL_THICKNESS, houseDepth + roofOverhang * 2);
+            const rightRoofPanel = new THREE.Mesh(rightRoofPanelGeo, roofMaterial); rightRoofPanel.position.set( houseWidth / 4, wallHeight + FLOOR_THICKNESS + roofPitch / 2, 0 ); rightRoofPanel.rotation.z = -roofAngle; rightRoofPanel.castShadow = true; houseGroup.add(rightRoofPanel);
+            const leftRoofPanelGeo = new THREE.BoxGeometry(slopeLength + roofOverhang/2, ROOF_PANEL_THICKNESS, houseDepth + roofOverhang * 2);
+            const leftRoofPanel = new THREE.Mesh(leftRoofPanelGeo, roofMaterial); leftRoofPanel.position.set( -houseWidth / 4, wallHeight + FLOOR_THICKNESS + roofPitch / 2, 0 ); leftRoofPanel.rotation.z = roofAngle; leftRoofPanel.castShadow = true; houseGroup.add(leftRoofPanel);
+
+            const gableShape = new THREE.Shape(); gableShape.moveTo(-houseWidth / 2, 0); gableShape.lineTo(houseWidth / 2, 0); gableShape.lineTo(0, roofPitch); gableShape.lineTo(-houseWidth / 2, 0);
+            const extrudeSettings = { depth: WALL_THICKNESS, bevelEnabled: false }; const gableGeo = new THREE.ExtrudeGeometry(gableShape, extrudeSettings);
+            const frontGable = new THREE.Mesh(gableGeo, gableAccentMaterial); frontGable.position.set(0, wallHeight + FLOOR_THICKNESS, houseDepth / 2 + WALL_THICKNESS/2); frontGable.castShadow = true; frontGable.receiveShadow = true; houseGroup.add(frontGable);
+            const backGable = new THREE.Mesh(gableGeo, sidingMaterial); backGable.position.set(0, wallHeight + FLOOR_THICKNESS, -houseDepth / 2 - WALL_THICKNESS/2); backGable.castShadow = true; backGable.receiveShadow = true; houseGroup.add(backGable);
+
+            const garageDoorHeight = wallHeight * 0.8; const garageDoorWidth = (houseWidth / 2) * 0.8; const GARAGE_DOOR_THICKNESS = 0.1;
+            const garageDoorGeo = new THREE.BoxGeometry(garageDoorWidth, garageDoorHeight, GARAGE_DOOR_THICKNESS);
+            const garageDoor1 = new THREE.Mesh(garageDoorGeo, garageDoorMaterial); garageDoor1.position.set( -houseWidth / 4, garageDoorHeight / 2 + FLOOR_THICKNESS, -houseDepth / 2 - WALL_THICKNESS - GARAGE_DOOR_THICKNESS / 2 ); garageDoor1.castShadow = true; houseGroup.add(garageDoor1);
+            const garageDoor2 = new THREE.Mesh(garageDoorGeo, garageDoorMaterial); garageDoor2.position.set( houseWidth / 4, garageDoorHeight / 2 + FLOOR_THICKNESS, -houseDepth / 2 - WALL_THICKNESS - GARAGE_DOOR_THICKNESS / 2 ); garageDoor2.castShadow = true; houseGroup.add(garageDoor2);
+
+            const porchWidth = houseWidth * 0.6; const porchDepthVal = 2.5; const porchWallHeight = wallHeight * 0.8; const porchFloorThick = 0.15;
+            const porchFloorGeo = new THREE.BoxGeometry(porchWidth, porchFloorThick, porchDepthVal); const porchFloor = new THREE.Mesh(porchFloorGeo, sidingMaterial); porchFloor.position.set(0, FLOOR_THICKNESS + (foundationHeight - FLOOR_THICKNESS) + porchFloorThick/2, houseDepth / 2 + porchDepthVal / 2 + WALL_THICKNESS); porchFloor.castShadow = true; porchFloor.receiveShadow = true; houseGroup.add(porchFloor);
+            const porchRoofGeo = new THREE.BoxGeometry(porchWidth + 0.2, 0.1, porchDepthVal + 0.2); const porchRoof = new THREE.Mesh(porchRoofGeo, roofMaterial); porchRoof.position.set(0, FLOOR_THICKNESS + porchWallHeight + 0.05, houseDepth / 2 + porchDepthVal / 2 + WALL_THICKNESS); porchRoof.castShadow = true; houseGroup.add(porchRoof);
+            const pillarRadius = 0.1; const pillarHeight = porchWallHeight - porchFloorThick; const pillarGeo = new THREE.CylinderGeometry(pillarRadius, pillarRadius, pillarHeight, 12);
+            const pillar1 = new THREE.Mesh(pillarGeo, porchPillarMaterial); pillar1.position.set(-porchWidth / 2 + pillarRadius * 2, porchFloor.position.y + porchFloorThick/2 + pillarHeight/2, houseDepth / 2 + porchDepthVal - pillarRadius * 3 + WALL_THICKNESS); pillar1.castShadow = true; houseGroup.add(pillar1);
+            const pillar2 = new THREE.Mesh(pillarGeo, porchPillarMaterial); pillar2.position.set(porchWidth / 2 - pillarRadius * 2, porchFloor.position.y + porchFloorThick/2 + pillarHeight/2, houseDepth / 2 + porchDepthVal - pillarRadius * 3 + WALL_THICKNESS); pillar2.castShadow = true; houseGroup.add(pillar2);
+            const stepHeight = 0.2; const stepDepthVal = 0.5; const stepGeo = new THREE.BoxGeometry(porchWidth * 0.5, stepHeight, stepDepthVal); const stepMesh = new THREE.Mesh(stepGeo, foundationMaterial); stepMesh.position.set(0, FLOOR_THICKNESS + (foundationHeight - FLOOR_THICKNESS)/2, houseDepth / 2 + porchDepthVal + stepDepthVal / 2 + WALL_THICKNESS); stepMesh.castShadow = true; stepMesh.receiveShadow = true; houseGroup.add(stepMesh);
+
+            const livingRoomDepth = houseDepth * 0.6; const kitchenDepth = houseDepth * 0.4; const bedroomWidth = houseWidth * 0.45; const kitchenWidth = houseWidth * 0.45;
+            const lrFloorGeo = new THREE.PlaneGeometry(bedroomWidth, livingRoomDepth); const lrFloorMat = new THREE.MeshStandardMaterial({ color: 0xffcc80, side: THREE.DoubleSide }); const lrFloor = new THREE.Mesh(lrFloorGeo, lrFloorMat); lrFloor.rotation.x = -Math.PI / 2; lrFloor.position.set(-houseWidth/4 + WALL_THICKNESS/2, FLOOR_THICKNESS + 0.01, houseDepth/2 - livingRoomDepth/2 - WALL_THICKNESS/2); lrFloor.receiveShadow = true; houseGroup.add(lrFloor);
+            const brFloorGeo = new THREE.PlaneGeometry(bedroomWidth, kitchenDepth); const brFloorMat = new THREE.MeshStandardMaterial({ color: 0x90caf9, side: THREE.DoubleSide }); const brFloor = new THREE.Mesh(brFloorGeo, brFloorMat); brFloor.rotation.x = -Math.PI / 2; brFloor.position.set(-houseWidth/4 + WALL_THICKNESS/2, FLOOR_THICKNESS + 0.01, -houseDepth/2 + kitchenDepth/2 + WALL_THICKNESS/2); brFloor.receiveShadow = true; houseGroup.add(brFloor);
+            const kiFloorGeo = new THREE.PlaneGeometry(kitchenWidth, kitchenDepth); const kiFloorMat = new THREE.MeshStandardMaterial({ color: 0xa5d6a7, side: THREE.DoubleSide }); const kiFloor = new THREE.Mesh(kiFloorGeo, kiFloorMat); kiFloor.rotation.x = -Math.PI / 2; kiFloor.position.set(houseWidth/4 - WALL_THICKNESS/2, FLOOR_THICKNESS + 0.01, -houseDepth/2 + kitchenDepth/2 + WALL_THICKNESS/2); kiFloor.receiveShadow = true; houseGroup.add(kiFloor);
+
+            // --- Furniture ---
+            if (USE_CUSTOM_MODELS) {
+                const modelLoadCallback = (gltf, modelName, desiredScale, positionVec) => {
+                    console.log(`${modelName} GLTF data loaded successfully.`);
+                    const loadedModel = gltf.scene;
+                    loadedModel.name = modelName;
+                    loadedModel.scale.set(desiredScale, desiredScale, desiredScale);
+                    loadedModel.position.set(positionVec.x, FLOOR_THICKNESS, positionVec.z); // Place base on floor
+                    loadedModel.traverse(node => { if (node.isMesh) { node.castShadow = true; node.receiveShadow = true; } });
+                    houseGroup.add(loadedModel);
+                    console.log(`Loaded ${modelName} ADDED to scene graph.`);
+                };
+                const modelErrorCallback = (error, modelName, fallbackFunction) => {
+                    console.error(`Error loading ${modelName}:`, error);
+                    if (fallbackFunction) fallbackFunction();
+                };
+
+                // Human Bed
+                const bedModelURL = 'https://raw.githubusercontent.com/Kmberry1989/catbeing/7d8000b76928ba3b03a0a5a51316df804aaef886/bed.glb';
+                loader.load(bedModelURL, gltf => modelLoadCallback(gltf, "CustomHumanBed", 0.015, locations["bedroom-bed-spot"].pos), undefined, error => modelErrorCallback(error, "CustomHumanBed", createProceduralBed));
+                
+                // Couch
+                const couchModelURL = 'https://raw.githubusercontent.com/Kmberry1989/catbeing/7d8000b76928ba3b03a0a5a51316df804aaef886/couch.glb';
+                loader.load(couchModelURL, gltf => modelLoadCallback(gltf, "CustomCouch", 0.015, locations["living-room-sofa-spot"].pos), undefined, error => modelErrorCallback(error, "CustomCouch", createProceduralSofa));
+
+                // Food Bowl
+                const foodBowlModelURL = 'https://raw.githubusercontent.com/Kmberry1989/catbeing/7d8000b76928ba3b03a0a5a51316df804aaef886/food.glb';
+                loader.load(foodBowlModelURL, gltf => modelLoadCallback(gltf, "CustomFoodBowl", 0.3, locations["kitchen-food-bowl-spot"].pos), undefined, error => modelErrorCallback(error, "CustomFoodBowl", createProceduralBowl)); 
+
+                // Water Bowl
+                const waterBowlModelURL = 'https://raw.githubusercontent.com/Kmberry1989/catbeing/7d8000b76928ba3b03a0a5a51316df804aaef886/water.glb';
+                loader.load(waterBowlModelURL, gltf => modelLoadCallback(gltf, "CustomWaterBowl", 0.3, locations["kitchen-water-bowl-spot"].pos), undefined, error => modelErrorCallback(error, "CustomWaterBowl", () => console.log("No fallback for water bowl."))); 
+
+                // Cat Bed
+                const catBedModelURL = 'https://raw.githubusercontent.com/Kmberry1989/catbeing/7d8000b76928ba3b03a0a5a51316df804aaef886/catbed.glb';
+                loader.load(catBedModelURL, gltf => modelLoadCallback(gltf, "CustomCatBed", 0.015, locations["bedroom-cat-bed-spot"].pos), undefined, error => modelErrorCallback(error, "CustomCatBed"));
+                
+                // Cat Tree
+                const catTreeModelURL = 'https://raw.githubusercontent.com/Kmberry1989/catbeing/7d8000b76928ba3b03a0a5a51316df804aaef886/cattree.glb';
+                loader.load(catTreeModelURL, gltf => modelLoadCallback(gltf, "CustomCatTree", 0.01, locations["living-room-cat-tree-spot"].pos), undefined, error => modelErrorCallback(error, "CustomCatTree"));
+
+                // Chair
+                const chairModelURL = 'https://raw.githubusercontent.com/Kmberry1989/catbeing/7d8000b76928ba3b03a0a5a51316df804aaef886/chair.glb';
+                loader.load(chairModelURL, gltf => modelLoadCallback(gltf, "CustomChair", 0.012, locations["living-room-chair-spot"].pos), undefined, error => modelErrorCallback(error, "CustomChair"));
+
+            } else {
+                createProceduralBed();
+                createProceduralBowl(); 
+                createProceduralSofa();
+            }
+            scene.add(houseGroup);
+            houseGroup.position.y = 0.01; 
+        }
+
+        function createProceduralBed() { console.log("Creating procedural bed."); const bedGeo = new THREE.BoxGeometry(1.5, proceduralBedHeight, 2.5); const bedMat = new THREE.MeshStandardMaterial({ color: 0x4a5568 }); const bedMesh = new THREE.Mesh(bedGeo, bedMat); bedMesh.name = "ProceduralBed"; bedMesh.position.set(locations["bedroom-bed-spot"].pos.x, (proceduralBedHeight / 2) + FLOOR_THICKNESS, locations["bedroom-bed-spot"].pos.z); bedMesh.castShadow = true; bedMesh.receiveShadow = true; houseGroup.add(bedMesh); }
+        function createProceduralBowl() { console.log("Creating procedural food bowl."); const bowlGeo = new THREE.CylinderGeometry(0.3, 0.4, proceduralBowlHeight, 16); const bowlMat = new THREE.MeshStandardMaterial({color: 0xff6347}); const bowlMesh = new THREE.Mesh(bowlGeo, bowlMat); bowlMesh.name = "ProceduralFoodBowl"; bowlMesh.position.set(locations["kitchen-food-bowl-spot"].pos.x, (proceduralBowlHeight/2) + FLOOR_THICKNESS, locations["kitchen-food-bowl-spot"].pos.z); bowlMesh.castShadow = true; houseGroup.add(bowlMesh); }
+        function createProceduralSofa() { console.log("Creating procedural sofa."); const sofaGeo = new THREE.BoxGeometry(2.5, proceduralSofaHeight, 1); const sofaMat = new THREE.MeshStandardMaterial({ color: 0x744210 }); const sofaMesh = new THREE.Mesh(sofaGeo, sofaMat); sofaMesh.name = "ProceduralSofa"; sofaMesh.position.set(locations["living-room-sofa-spot"].pos.x, (proceduralSofaHeight/2) + FLOOR_THICKNESS, locations["living-room-sofa-spot"].pos.z); sofaMesh.castShadow = true; sofaMesh.receiveShadow = true; houseGroup.add(sofaMesh); }
+
+        function createCat() {
+             if (USE_CUSTOM_MODELS) {
+                console.log("Attempting to load custom cat model...");
+                const catModelURL = 'https://Kmberry1989.github.io/catbeing/cat.glb';
+                loader.load(catModelURL, 
+                    function (gltf) { 
+                        console.log("Cat GLTF data loaded successfully.");
+                        catMesh = gltf.scene; 
+                        catMesh.name = "CustomCat";
+                        const catModelScale = 0.01; 
+                        catMesh.scale.set(catModelScale, catModelScale, catModelScale);
+                        const initialLocation = locations[catActivity.locationKey];
+                        if (initialLocation) { catMesh.position.copy(initialLocation.pos); } 
+                        else { catMesh.position.set(0, FLOOR_THICKNESS + CAT_RADIUS, 0); }
+                        catMesh.traverse(node => { if (node.isMesh) { node.castShadow = true; } });
+                        scene.add(catMesh); 
+                        console.log("Loaded cat model ADDED to scene graph.");
+                    }, 
+                    undefined, 
+                    function (error) { console.error('Error loading custom cat model:', error); createProceduralCat(); }
+                );
+            } else {
+                createProceduralCat();
+            }
+        }
+
+        function createProceduralCat() { console.log("Creating procedural cat (sphere)."); const catGeometry = new THREE.SphereGeometry(CAT_RADIUS, 16, 16); const catMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 }); catMesh = new THREE.Mesh(catGeometry, catMaterial); catMesh.name = "ProceduralCat"; catMesh.castShadow = true; const initialLocation = locations[catActivity.locationKey]; if (initialLocation) { catMesh.position.copy(initialLocation.pos); } else { catMesh.position.set(0, FLOOR_THICKNESS + CAT_RADIUS, 0); } scene.add(catMesh); }
+
+        function onWindowResize() { camera.aspect = canvasContainer.clientWidth / canvasContainer.clientHeight; camera.updateProjectionMatrix(); renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight); }
+        function formatTime(hours, minutes) { const ampm = hours >= 12 ? 'PM' : 'AM'; const displayHours = hours % 12 || 12; const displayMinutes = minutes < 10 ? '0' + minutes : minutes; return `${displayHours}:${displayMinutes} ${ampm}`; }
+        function updateClock() { gameMinutes++; if (gameMinutes >= 60) { gameMinutes = 0; gameHours++; if (gameHours >= 24) { gameHours = 0; } } clockDisplay.textContent = formatTime(gameHours, gameMinutes); }
+        function getRandomInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+
+        function chooseNewActivity() {
+            let possibleNow = activities.filter(act => { if (!act.timeOfDay) return true; return act.timeOfDay.some(range => gameHours >= range[0] && gameHours <= range[1]); });
+            if (possibleNow.length === 0) { possibleNow = activities.filter(act => act.name !== "Sleeping"); if (possibleNow.length === 0) possibleNow = activities; }
+            const newActivityTemplate = possibleNow[getRandomInt(0, possibleNow.length - 1)];
+            const newLocationKey = newActivityTemplate.locations[getRandomInt(0, newActivityTemplate.locations.length - 1)];
+            catActivity.name = newActivityTemplate.name; catActivity.duration = getRandomInt(newActivityTemplate.minDuration, newActivityTemplate.maxDuration); catActivity.locationKey = newLocationKey; catActivity.message = newActivityTemplate.message(newLocationKey);
+        }
+
+        let targetPosition = new THREE.Vector3(); let isMoving = false;
+        function updateCat() {
+            if (!catMesh) return; 
+            catActivity.duration--;
+            if (catActivity.duration <= 0) { chooseNewActivity(); const newLocation = locations[catActivity.locationKey]; if (newLocation) { targetPosition.copy(newLocation.pos); isMoving = true; } }
+            if (isMoving) { const distance = catMesh.position.distanceTo(targetPosition); if (distance > 0.05) { catMesh.position.lerp(targetPosition, 0.05); } else { catMesh.position.copy(targetPosition); isMoving = false; } }
+            statusDisplay.textContent = catActivity.message;
+        }
+
+        const skyColors = { dawn: { bg: new THREE.Color(0xffcf8c), light: 0.7 }, day: { bg: new THREE.Color(0x87ceeb), light: 1.0 }, dusk: { bg: new THREE.Color(0xff8c69), light: 0.6 }, night: { bg: new THREE.Color(0x000033), light: 0.3 } };
+        function updateExternalView() {
+            let timeOfDayKey = 'day'; if (gameHours >= 5 && gameHours < 8) timeOfDayKey = 'dawn'; else if (gameHours >= 8 && gameHours < 18) timeOfDayKey = 'day'; else if (gameHours >= 18 && gameHours < 21) timeOfDayKey = 'dusk'; else timeOfDayKey = 'night';
+            const viewColors = skyColors[timeOfDayKey]; if (scene.background.getHex() !== viewColors.bg.getHex()) { scene.background.lerpColors(scene.background, viewColors.bg, 0.05); }
+            scene.traverse(child => { if (child.isAmbientLight) { child.intensity = THREE.MathUtils.lerp(child.intensity, viewColors.light * 0.6, 0.05); } if (child.isDirectionalLight) { child.intensity = THREE.MathUtils.lerp(child.intensity, viewColors.light * 0.8, 0.05); if (timeOfDayKey === 'dawn') child.position.set(10, 5, 10); else if (timeOfDayKey === 'day') child.position.set(5,10,7.5); else if (timeOfDayKey === 'dusk') child.position.set(-10, 5, 10); else if (timeOfDayKey === 'night') child.intensity = viewColors.light * 0.15; } });
+        }
+
+        function animate() { requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); }
+        function gameLoop() { updateClock(); updateCat(); updateExternalView(); }
+        function initGame() { initThreeJS(); chooseNewActivity(); const initialLocation = locations[catActivity.locationKey]; if(initialLocation) { targetPosition.copy(initialLocation.pos); } updateCat(); updateExternalView(); setInterval(gameLoop, gameTimeSpeed); animate(); }
+        document.addEventListener('DOMContentLoaded', initGame);
+    </script>
+</body>
+</html>
+
