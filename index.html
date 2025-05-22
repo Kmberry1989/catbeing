@@ -229,6 +229,7 @@
             const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x556B2F, side: THREE.DoubleSide });
             const groundPlane = new THREE.Mesh(groundGeometry, groundMaterial);
             groundPlane.rotation.x = -Math.PI / 2;
+            groundPlane.position.y = -0.05; // Lower the ground plane
             groundPlane.receiveShadow = true;
             scene.add(groundPlane);
 
@@ -302,7 +303,7 @@
                     const loadedModel = gltf.scene;
                     loadedModel.name = modelName;
                     loadedModel.scale.set(desiredScale, desiredScale, desiredScale);
-                    loadedModel.position.set(positionVec.x, FLOOR_THICKNESS, positionVec.z); 
+                    loadedModel.position.set(positionVec.x, positionVec.y, positionVec.z); 
                     loadedModel.traverse(node => { if (node.isMesh) { node.castShadow = true; node.receiveShadow = true; } });
                     houseGroup.add(loadedModel);
                     console.log(`Loaded ${modelName} ADDED to scene graph.`);
@@ -337,7 +338,7 @@
                 loader.load(waterBowlModelURL, gltf => modelLoadCallback(gltf, "CustomWaterBowl", 0.3, locations["kitchen-water-bowl-spot"].pos), xhr => modelProgressCallback(xhr, "CustomWaterBowl"), error => modelErrorCallback(error, "CustomWaterBowl", () => console.log("No fallback for water bowl."))); 
 
                 // Cat Bed
-                const catBedModelURL = 'https://Kmberry1989.github.io/catbeing//catbed.glb';
+                const catBedModelURL = 'https://Kmberry1989.github.io/catbeing/catbed.glb';
                 console.log("Attempting to load CustomCatBed from:", catBedModelURL);
                 loader.load(catBedModelURL, gltf => modelLoadCallback(gltf, "CustomCatBed", 0.015, locations["bedroom-cat-bed-spot"].pos), xhr => modelProgressCallback(xhr, "CustomCatBed"), error => modelErrorCallback(error, "CustomCatBed"));
                 
