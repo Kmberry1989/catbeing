@@ -125,7 +125,7 @@
         let catActivity = {
             name: "Waking up",
             duration: 0,
-            locationKey: "bedroom-bed-spot", // Start on the human bed
+            locationKey: "bedroom-bed-spot", 
             message: "Stretching and yawning..."
         };
         
@@ -302,43 +302,54 @@
                     const loadedModel = gltf.scene;
                     loadedModel.name = modelName;
                     loadedModel.scale.set(desiredScale, desiredScale, desiredScale);
-                    loadedModel.position.set(positionVec.x, FLOOR_THICKNESS, positionVec.z); // Place base on floor
+                    loadedModel.position.set(positionVec.x, FLOOR_THICKNESS, positionVec.z); 
                     loadedModel.traverse(node => { if (node.isMesh) { node.castShadow = true; node.receiveShadow = true; } });
                     houseGroup.add(loadedModel);
                     console.log(`Loaded ${modelName} ADDED to scene graph.`);
                 };
                 const modelErrorCallback = (error, modelName, fallbackFunction) => {
-                    console.error(`Error loading ${modelName}:`, error);
+                    console.error(`Error loading ${modelName} from URL. Full error object:`, error);
+                    if (error.target && error.target.status) { console.error(`HTTP Status for ${modelName}: ${error.target.status} ${error.target.statusText}`);}
                     if (fallbackFunction) fallbackFunction();
+                };
+                const modelProgressCallback = (xhr, modelName) => {
+                    console.log( `${modelName}: ${(xhr.loaded / xhr.total * 100)}% loaded` );
                 };
 
                 // Human Bed
-                const bedModelURL = 'https://raw.githubusercontent.com/Kmberry1989/catbeing/7d8000b76928ba3b03a0a5a51316df804aaef886/bed.glb';
-                loader.load(bedModelURL, gltf => modelLoadCallback(gltf, "CustomHumanBed", 0.015, locations["bedroom-bed-spot"].pos), undefined, error => modelErrorCallback(error, "CustomHumanBed", createProceduralBed));
+                const bedModelURL = 'https://Kmberry1989.github.io/catbeing/bed.glb'; // Reverted to blob, then add ?raw=true
+                console.log("Attempting to load CustomHumanBed from:", bedModelURL);
+                loader.load(bedModelURL, gltf => modelLoadCallback(gltf, "CustomHumanBed", 0.015, locations["bedroom-bed-spot"].pos), xhr => modelProgressCallback(xhr, "CustomHumanBed"), error => modelErrorCallback(error, "CustomHumanBed", createProceduralBed));
                 
                 // Couch
-                const couchModelURL = 'https://raw.githubusercontent.com/Kmberry1989/catbeing/7d8000b76928ba3b03a0a5a51316df804aaef886/couch.glb';
-                loader.load(couchModelURL, gltf => modelLoadCallback(gltf, "CustomCouch", 0.015, locations["living-room-sofa-spot"].pos), undefined, error => modelErrorCallback(error, "CustomCouch", createProceduralSofa));
+                const couchModelURL = 'https://Kmberry1989.github.io/catbeing/couch.glb';
+                console.log("Attempting to load CustomCouch from:", couchModelURL);
+                loader.load(couchModelURL, gltf => modelLoadCallback(gltf, "CustomCouch", 0.015, locations["living-room-sofa-spot"].pos), xhr => modelProgressCallback(xhr, "CustomCouch"), error => modelErrorCallback(error, "CustomCouch", createProceduralSofa));
 
                 // Food Bowl
-                const foodBowlModelURL = 'https://raw.githubusercontent.com/Kmberry1989/catbeing/7d8000b76928ba3b03a0a5a51316df804aaef886/food.glb';
-                loader.load(foodBowlModelURL, gltf => modelLoadCallback(gltf, "CustomFoodBowl", 0.3, locations["kitchen-food-bowl-spot"].pos), undefined, error => modelErrorCallback(error, "CustomFoodBowl", createProceduralBowl)); 
+                const foodBowlModelURL = 'https://Kmberry1989.github.io/catbeing/food.glb';
+                console.log("Attempting to load CustomFoodBowl from:", foodBowlModelURL);
+                loader.load(foodBowlModelURL, gltf => modelLoadCallback(gltf, "CustomFoodBowl", 0.3, locations["kitchen-food-bowl-spot"].pos), xhr => modelProgressCallback(xhr, "CustomFoodBowl"), error => modelErrorCallback(error, "CustomFoodBowl", createProceduralBowl)); 
 
                 // Water Bowl
-                const waterBowlModelURL = 'https://raw.githubusercontent.com/Kmberry1989/catbeing/7d8000b76928ba3b03a0a5a51316df804aaef886/water.glb';
-                loader.load(waterBowlModelURL, gltf => modelLoadCallback(gltf, "CustomWaterBowl", 0.3, locations["kitchen-water-bowl-spot"].pos), undefined, error => modelErrorCallback(error, "CustomWaterBowl", () => console.log("No fallback for water bowl."))); 
+                const waterBowlModelURL = 'https://Kmberry1989.github.io/catbeing/water.glb';
+                console.log("Attempting to load CustomWaterBowl from:", waterBowlModelURL);
+                loader.load(waterBowlModelURL, gltf => modelLoadCallback(gltf, "CustomWaterBowl", 0.3, locations["kitchen-water-bowl-spot"].pos), xhr => modelProgressCallback(xhr, "CustomWaterBowl"), error => modelErrorCallback(error, "CustomWaterBowl", () => console.log("No fallback for water bowl."))); 
 
                 // Cat Bed
-                const catBedModelURL = 'https://raw.githubusercontent.com/Kmberry1989/catbeing/7d8000b76928ba3b03a0a5a51316df804aaef886/catbed.glb';
-                loader.load(catBedModelURL, gltf => modelLoadCallback(gltf, "CustomCatBed", 0.015, locations["bedroom-cat-bed-spot"].pos), undefined, error => modelErrorCallback(error, "CustomCatBed"));
+                const catBedModelURL = 'https://Kmberry1989.github.io/catbeing//catbed.glb';
+                console.log("Attempting to load CustomCatBed from:", catBedModelURL);
+                loader.load(catBedModelURL, gltf => modelLoadCallback(gltf, "CustomCatBed", 0.015, locations["bedroom-cat-bed-spot"].pos), xhr => modelProgressCallback(xhr, "CustomCatBed"), error => modelErrorCallback(error, "CustomCatBed"));
                 
-                // Cat Tree
-                const catTreeModelURL = 'https://raw.githubusercontent.com/Kmberry1989/catbeing/7d8000b76928ba3b03a0a5a51316df804aaef886/cattree.glb';
-                loader.load(catTreeModelURL, gltf => modelLoadCallback(gltf, "CustomCatTree", 0.01, locations["living-room-cat-tree-spot"].pos), undefined, error => modelErrorCallback(error, "CustomCatTree"));
+                // Cat tree
+                const catTreeModelURL = 'https://Kmberry1989.github.io/catbeing/cattree.glb';
+                console.log("Attempting to load CustomCatTree from:", catTreeModelURL);
+                loader.load(catTreeModelURL, gltf => modelLoadCallback(gltf, "CustomCatTree", 0.01, locations["living-room-cat-tree-spot"].pos), xhr => modelProgressCallback(xhr, "CustomCatTree"), error => modelErrorCallback(error, "CustomCatTree"));
 
                 // Chair
-                const chairModelURL = 'https://raw.githubusercontent.com/Kmberry1989/catbeing/7d8000b76928ba3b03a0a5a51316df804aaef886/chair.glb';
-                loader.load(chairModelURL, gltf => modelLoadCallback(gltf, "CustomChair", 0.012, locations["living-room-chair-spot"].pos), undefined, error => modelErrorCallback(error, "CustomChair"));
+                const chairModelURL = 'https://Kmberry1989.github.io/catbeing/chair.glb';
+                console.log("Attempting to load CustomChair from:", chairModelURL);
+                loader.load(chairModelURL, gltf => modelLoadCallback(gltf, "CustomChair", 0.012, locations["living-room-chair-spot"].pos), xhr => modelProgressCallback(xhr, "CustomChair"), error => modelErrorCallback(error, "CustomChair"));
 
             } else {
                 createProceduralBed();
@@ -355,8 +366,8 @@
 
         function createCat() {
              if (USE_CUSTOM_MODELS) {
-                console.log("Attempting to load custom cat model...");
                 const catModelURL = 'https://Kmberry1989.github.io/catbeing/cat.glb';
+                console.log("Attempting to load custom cat model from:", catModelURL);
                 loader.load(catModelURL, 
                     function (gltf) { 
                         console.log("Cat GLTF data loaded successfully.");
@@ -371,8 +382,14 @@
                         scene.add(catMesh); 
                         console.log("Loaded cat model ADDED to scene graph.");
                     }, 
-                    undefined, 
-                    function (error) { console.error('Error loading custom cat model:', error); createProceduralCat(); }
+                    function (xhr) { // onProgress
+                         console.log( `CustomCat: ${(xhr.loaded / xhr.total * 100)}% loaded` );
+                    },
+                    function (error) { 
+                        console.error('Error loading custom cat model. Full error object:', error);
+                        if (error.target && error.target.status) { console.error(`HTTP Status for CustomCat: ${error.target.status} ${error.target.statusText}`);}
+                        createProceduralCat(); 
+                    }
                 );
             } else {
                 createProceduralCat();
@@ -417,4 +434,3 @@
     </script>
 </body>
 </html>
-
